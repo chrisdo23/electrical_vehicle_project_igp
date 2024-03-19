@@ -30,4 +30,4 @@ class Vehicle():
         self.home_lat = lat
 
 # Hexagon Object
-# 
+# Behavior Vector
