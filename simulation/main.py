@@ -11,6 +11,7 @@ import car_simulation as sim
 import os
 
 refresh = False
+rerun_simulation = True
 simulation_level = 7
 env = simpy.Environment()
 now = datetime.combine(datetime.now().date() + timedelta(days=1), 
@@ -29,22 +30,27 @@ if refresh:
     raw_station_data.to_csv('simulation/sys_files/generated_file/raw_station_data.csv')
     raw_hex_data.to_csv('simulation/sys_files/generated_file/raw_hex_data.csv')
 
-# Generate Simulation data
-sim_car_list = sim.generate_car_list()
-sim_station_list = sim.generate_staion(env)
-log_df = pd.DataFrame(columns=['timestamp', 'car_id', 'station_id', 'event_name'])
+# Run simulation
+if rerun_simulation:
+    # Generate Simulation data
+    sim_car_list = sim.generate_car_list()
+    sim_station_list = sim.generate_staion(env)
+    log_df = pd.DataFrame(columns=['timestamp', 'car_id', 'station_id', 'event_name'])
 
-for id, ev in sim_car_list.iterrows():
-    # chosen_station = dict(car_list[car_list['CarId'] == id].head(1))['ChargeDeviceId'].values[0]
-    chosen_station = ev['ChargeDeviceId']
-    # car_info = dict(car_list[car_list['CarId'] == id].head(1))
-    station_info = dict(sim_station_list[sim_station_list['ChargeDeviceId'] == chosen_station].head(1))
-    # station_name = station_info['ChargeDeviceName'].values[0]
-    charge_time = ev['ChargeTime']
-    resource = station_info['Station'].values[0]
-    env.process(sim.car(env,id,chosen_station,resource,charge_time,now,log_df))
+    for id, ev in sim_car_list.iterrows():
+        # chosen_station = dict(car_list[car_list['CarId'] == id].head(1))['ChargeDeviceId'].values[0]
+        chosen_station = ev['ChargeDeviceId']
+        # car_info = dict(car_list[car_list['CarId'] == id].head(1))
+        station_info = dict(sim_station_list[sim_station_list['ChargeDeviceId'] == chosen_station].head(1))
+        # station_name = station_info['ChargeDeviceName'].values[0]
+        charge_time = ev['ChargeTime']
+        resource = station_info['Station'].values[0]
+        env.process(sim.car(env,id,chosen_station,resource,charge_time,now,log_df))
+    env.run()
+    log_df.to_csv('simulation/output/log/'+datetime.now().strftime("%Y%m%d%H%M")+'_sim_result.log')
+    log_df.to_csv('simulation/sys_files/latest_sim_result.csv')
 
-env.run()
+
 
 
 

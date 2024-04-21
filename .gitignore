@@ -2,6 +2,7 @@
 data_population/
 temp/
 geo_data/
+simulation/output/log
 
 # Ignore connection data (with secrets connections)
 simulation/library/mong_connection.py
