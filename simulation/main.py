@@ -32,6 +32,7 @@ if refresh:
 # Generate Simulation data
 sim_car_list = sim.generate_car_list()
 sim_station_list = sim.generate_staion(env)
+log_df = pd.DataFrame(columns=['timestamp', 'car_id', 'station_id', 'event_name'])
 
 for id, ev in sim_car_list.iterrows():
     # chosen_station = dict(car_list[car_list['CarId'] == id].head(1))['ChargeDeviceId'].values[0]
@@ -41,12 +42,12 @@ for id, ev in sim_car_list.iterrows():
     # station_name = station_info['ChargeDeviceName'].values[0]
     charge_time = ev['ChargeTime']
     resource = station_info['Station'].values[0]
-    env.process(sim.car(env,id,chosen_station,resource,charge_time,now))
+    env.process(sim.car(env,id,chosen_station,resource,charge_time,now,log_df))
 
 env.run()
 
 
 
 
-# print(sim_station_list)
+print(log_df)
 

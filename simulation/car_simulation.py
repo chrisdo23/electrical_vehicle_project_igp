@@ -17,7 +17,7 @@ station_data_simulation = pd.read_csv('simulation/sys_files/generated_file/stati
 ports_data = pd.read_csv('simulation/sys_files/generated_file/ports_data.csv')
 
 
-def car(env, car_id, chosen_station, resource, charge_time, now_time):
+def car(env, car_id, chosen_station, resource, charge_time, now_time, log_df):
     arrival_hour = random.choices(population=combined_hour_data['hour'].values, weights=combined_hour_data['AverageTrafficCount'].values, cum_weights=None, k=1)[0]
     arrival_minute = arrival_hour*60*60 + random.randint(-30*60, 30*60)
     # trip_duration = random.randint(20, 60*24)
@@ -28,15 +28,23 @@ def car(env, car_id, chosen_station, resource, charge_time, now_time):
     # print('%s: Car id %s arrives at charging station \"%s\"' % (now_time + timedelta(minutes=int(env.now)), car_id, chosen_station))
     with resource.request() as req:
         if len(resource.queue) > 0:
-            print('%s: Car id %s arrives and starts queueing at station \"%s\"' % (now_time + timedelta(seconds=int(env.now)), car_id, chosen_station))
+            # print('%s: Car id %s arrives and starts queueing at station \"%s\"' % (now_time + timedelta(seconds=int(env.now)), car_id, chosen_station))
+            write_event(log_df, 'arrive - queue', car_id, chosen_station, now_time + timedelta(seconds=int(env.now)))
         yield req | env.timeout(wait_duration)
         if not req.triggered:
-            print('%s: Car id %s gives up on waiting at station \"%s\" after %d minutes' % (now_time + timedelta(seconds=int(env.now)), car_id, chosen_station, wait_duration/60))
+            # print('%s: Car id %s gives up on waiting at station \"%s\" after %d minutes' % (now_time + timedelta(seconds=int(env.now)), car_id, chosen_station, wait_duration/60))
+            write_event(log_df, 'queue - give up', car_id, chosen_station, now_time + timedelta(seconds=int(env.now)))
         else:
             # Charge the battery        
-            print('%s: Car id %s arrives and starts to charge at station \"%s\"' % (now_time + timedelta(seconds=int(env.now)), car_id, chosen_station))
+            # print('%s: Car id %s arrives and starts to charge at station \"%s\"' % (now_time + timedelta(seconds=int(env.now)), car_id, chosen_station))
+            write_event(log_df, 'arrive - charge', car_id, chosen_station, now_time + timedelta(seconds=int(env.now)))
             yield env.timeout(charge_time)
-            print('%s: Car id %s finishes and leaves station \"%s\"' % (now_time + timedelta(seconds=int(env.now)), car_id, chosen_station))
+            # print('%s: Car id %s finishes and leaves station \"%s\"' % (now_time + timedelta(seconds=int(env.now)), car_id, chosen_station))
+            write_event(log_df, 'charge - finish', car_id, chosen_station, now_time + timedelta(seconds=int(env.now)))
+
+# log_df = pd.DataFrame(columns=['timestamp', 'car_id', 'station_id', 'event_name'])
+def write_event(log_df, event_name, car_id, station_id, timestamp):
+    log_df.loc[len(log_df.index)] = [timestamp, car_id, station_id, event_name]  
 
 def generate_car_list():
     car_list = pd.DataFrame(list(range(0,cfg.user_per_day)), columns=['CarId'])
