@@ -11,7 +11,8 @@ import car_simulation as sim
 import os
 
 refresh = False
-rerun_simulation = True
+rerun_simulation = False
+
 simulation_level = 7
 env = simpy.Environment()
 now = datetime.combine(datetime.now().date() + timedelta(days=1), 
@@ -49,10 +50,6 @@ if rerun_simulation:
     env.run()
     log_df.to_csv('simulation/output/log/'+datetime.now().strftime("%Y%m%d%H%M")+'_sim_result.log')
     log_df.to_csv('simulation/sys_files/latest_sim_result.csv')
-
-
-
-
 
 
 print(log_df)

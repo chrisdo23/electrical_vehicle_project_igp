@@ -14,10 +14,17 @@ select_all = {}
 select_bristol = {"ChargeDeviceLocation.Address.PostTown" : "Bristol"}
 cwd = os.getcwd()
 
+
+def query_from_collection(collection, query):
+    project_db = mongo.get_database()
+    collection_db = project_db[collection]
+    result_list = mongo.mongo_query_to_list(collection_db, query)
+    project_db.client.close()
+    return result_list
+
 def get_station_data(query):
     project_db = mongo.get_database()
     stations_collection = project_db['Stations']
-
     stations = mongo.mongo_query_to_list(stations_collection, query)
 
     # Setup simulation slate
@@ -30,6 +37,7 @@ def get_station_data(query):
         for connector in station['Connector']:
             connector['Status'] = False
             connector['LastUpdatedAt'] = None
+    project_db.client.close()
     return stations
 
 # Get hexagon data
@@ -177,7 +185,7 @@ def process_traffic_data():
     hex_traffic_data = (traffic_data
                         .groupby(['HexLevel', 'HexId'], as_index=False)
                         .agg(
-                            AverageMotorVehicles = ('AllMotorVehicles', 'sum')
+                            AverageMotorVehicles = ('AllMotorVehicles', 'mean')
                         ))
     hex_station_data = (station_data
                         .groupby(['HexLevel', 'HexId'], as_index=False)
@@ -201,6 +209,90 @@ def process_traffic_data():
 # nearest_station_id(data_by_hex, data_by_station, 51.500095276686366, -2.5484000756829457)
 # nearest_station(data_by_hex, data_by_station, stations, 51.500095276686366, -2.5484000756829457)
 
+async def server_update_nearest_station(data_by_hex, data_by_station):    
+    project_db = mongo.get_database()
+    location_db = project_db['current_location']
+    response_db = project_db['python_response_nearest_stations']
+    # Query location from current_location
+    location_json = location_db.find_one({}, sort=[('timestamp', -1)])
+    # Delete all data in python_response_nearest_stations
+    response_db.delete_many({})
+    # Run nearest station calculation
+    data = nearest_station(data_by_hex, data_by_station, 
+                           stations, 
+                           float(location_json['car_location']['Latitude']), 
+                           float(location_json['car_location']['Longitude']))
+    # Push to python_response_nearest_stations
+    response_db.insert_many(data)
+    project_db.client.close()
+
+async def generate_business_data(raw_hex_data, raw_station_data):
+    # raw_hex_data
+    avg_traffic_per_hexagon = (raw_hex_data.copy()
+                            .query('AverageMotorVehicles > 0')
+                            .groupby(['HexLevel'], as_index=False)
+                            .agg(
+                                AverageMotorVehiclesPerHex = ('AverageMotorVehicles', 'mean')
+                            ))
+
+    avg_daily_demand_per_station = cfg.user_per_day/raw_station_data['ChargeDeviceId'].count()
+    # avg_traffic_per_hexagon
+    # test['']
+    avg_traffic_per_hexagon
+    # CAR PER HOUR
+    # place have 400 cars per hour --> ratio 400/270 --> mult with the average demand (which is two per station)
+    business_ref_table = raw_hex_data.copy()
+    business_ref_table = pd.merge(business_ref_table, avg_traffic_per_hexagon, how='left', on=['HexLevel'])
+    business_ref_table['IniCostHardwareCost'] = 1000
+    business_ref_table['IniCostInstallationCost'] = 400
+    business_ref_table['IniGridReinforcementCost'] = business_ref_table['KNumber'].apply(lambda x: 0 if x <= 1 else 500000)
+    business_ref_table['DailyDemandPerStation'] = business_ref_table.apply(lambda x: avg_daily_demand_per_station * x['AverageMotorVehicles'] / x['AverageMotorVehiclesPerHex'], axis=1)
+    business_ref_table['DailyElectricityCost'] = business_ref_table['DailyDemandPerStation']*1.74312
+    business_ref_table['DailyEstimatedRevenue'] = business_ref_table['DailyDemandPerStation']*26
+    business_ref_table['MonthlyEstimatedRevenue'] = business_ref_table['DailyEstimatedRevenue']*30
+    business_ref_table['MonthlyElectricityCost'] = business_ref_table['DailyElectricityCost']*30
+    business_ref_table['MonthlyMaintenanceCost'] = 300
+
+# if k number < 2 --> Maybe the grid reinforcement has been paid
+# need to recheck
+def cost_estimation(business_ref_table, lat, long, charge_point = 1, rental_cost = 2000, hex_res = 7):
+    ref_data = business_ref_table.copy().query('HexLevel == @hex_res')
+    h3_address = h3.geo_to_h3(lat, long, hex_res)
+    result = ref_data[ref_data['HexId'] == h3_address]
+    if result.empty:
+        result = {'Error' : 'Outside of search range'}
+    else:
+        result['Base Area'] = h3.hex_area(hex_res)
+        result['Charging Station In Area'] = result['AreaStationCount']
+        result['Charging Anxiety Level'] = result['KNumber'].apply(lambda x: 'Low' if x <= 1 else ('Medium' if (x>1 and x<3) else 'High'))
+        result['Daily Demand'] = round(result['DailyDemandPerStation'], 2)
+        result['Chargepoint Hardware Costs'] = result['IniCostHardwareCost']*charge_point
+        result['Chargepoint Installation Costs'] = result['IniCostInstallationCost']*charge_point
+        result['Grid Reinforcement Costs'] = result['IniGridReinforcementCost']
+        result['Electricity Cost'] = result['MonthlyElectricityCost']
+        result['Maintenance Cost'] = result['MonthlyMaintenanceCost']
+        result['Property Rental'] = rental_cost
+        result['Estimated Revenue'] = result['MonthlyEstimatedRevenue']
+        result['Estimated Profit'] = result['Estimated Revenue'] - result['Electricity Cost'] - result['Maintenance Cost'] - result['Property Rental']
+        result['Initial Cost'] = result['Chargepoint Hardware Costs'] + result['Chargepoint Installation Costs'] + result['Grid Reinforcement Costs']
+        result['Break Even (Years)'] = result['Initial Cost']/result['Estimated Profit']
+
+        cost_analysis = result[['Base Area', 
+                                'Charging Station In Area', 
+                                'Charging Anxiety Level', 
+                                'Daily Demand', 
+                                'Chargepoint Hardware Costs',
+                                'Chargepoint Installation Costs',
+                                'Grid Reinforcement Costs',
+                                'Electricity Cost',
+                                'Maintenance Cost',
+                                'Property Rental',
+                                'Estimated Revenue',
+                                'Estimated Profit',
+                                'Initial Cost',
+                                'Break Even (Years)']].head(1).copy()
+        return cost_analysis.to_dict('records')
+    
 # Simulation Preparation
 ## Time allocation
 
