@@ -7,6 +7,7 @@ import os
 import library.mong_connection as mongo
 import library.config as cfg
 import library.g7_utility as ult
+import asyncio
 
 # Get MongoDB Data
 ## Predefined Queries
@@ -213,6 +214,7 @@ async def server_update_nearest_station(data_by_hex, data_by_station):
     project_db = mongo.get_database()
     location_db = project_db['current_location']
     response_db = project_db['python_response_nearest_stations']
+    # while True:
     # Query location from current_location
     location_json = location_db.find_one({}, sort=[('timestamp', -1)])
     # Delete all data in python_response_nearest_stations
@@ -224,9 +226,10 @@ async def server_update_nearest_station(data_by_hex, data_by_station):
                            float(location_json['car_location']['Longitude']))
     # Push to python_response_nearest_stations
     response_db.insert_many(data)
+    # await asyncio.sleep(30)
     project_db.client.close()
 
-async def generate_business_data(raw_hex_data, raw_station_data):
+def generate_business_data(raw_hex_data, raw_station_data):
     # raw_hex_data
     avg_traffic_per_hexagon = (raw_hex_data.copy()
                             .query('AverageMotorVehicles > 0')
@@ -252,6 +255,7 @@ async def generate_business_data(raw_hex_data, raw_station_data):
     business_ref_table['MonthlyEstimatedRevenue'] = business_ref_table['DailyEstimatedRevenue']*30
     business_ref_table['MonthlyElectricityCost'] = business_ref_table['DailyElectricityCost']*30
     business_ref_table['MonthlyMaintenanceCost'] = 300
+    return business_ref_table
 
 # if k number < 2 --> Maybe the grid reinforcement has been paid
 # need to recheck
@@ -292,7 +296,25 @@ def cost_estimation(business_ref_table, lat, long, charge_point = 1, rental_cost
                                 'Initial Cost',
                                 'Break Even (Years)']].head(1).copy()
         return cost_analysis.to_dict('records')
-    
+
+async def server_update_business_db(business_ref_table):    # NEED TO RREPLACE NEW FUNCTION
+    project_db = mongo.get_database()
+    request_db = project_db['business_request']
+    response_db = project_db['business_response']
+    # while True:
+    # Query location from current_location
+    request_json = request_db.find_one({}, sort=[('timestamp', -1)])
+    # Delete all data in python_response_nearest_stations
+    response_db.delete_many({})
+    # Run nearest station calculation
+    data = cost_estimation(business_ref_table, 
+                           float(request_json['latitude']),
+                           float(request_json['longitude']))
+    # Push to python_response_nearest_stations
+    response_db.insert_many(data)
+    # await asyncio.sleep(30)
+    project_db.client.close()
+
 # Simulation Preparation
 ## Time allocation
 

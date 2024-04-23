@@ -7,6 +7,7 @@ import random
 from datetime import datetime, timedelta
 import data_processing as dpr
 import library.config as cfg
+import asyncio
 
 traffic_allocation = pd.read_csv('simulation/sys_files/generated_file/traffic_allocation.csv')
 station_data_simulation = pd.read_csv('simulation/sys_files/generated_file/station_data_simulation.csv')

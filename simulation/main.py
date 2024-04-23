@@ -9,6 +9,7 @@ import library.config as cfg
 import data_processing as dpr
 import car_simulation as sim
 import os
+import asyncio
 
 refresh = False
 rerun_simulation = False
@@ -24,12 +25,14 @@ if refresh:
     station_data_simulation = dpr.extract_station_data(simulation_level)
     ports_data = dpr.extract_charging_port_data()
     raw_station_data, raw_hex_data = dpr.process_traffic_data()
+    business_ref_table = dpr.generate_business_data(raw_hex_data, raw_station_data)
 
     traffic_allocation.to_csv('simulation/sys_files/generated_file/traffic_allocation.csv')
     station_data_simulation.to_csv('simulation/sys_files/generated_file/station_data_simulation.csv')
     ports_data.to_csv('simulation/sys_files/generated_file/ports_data.csv')
     raw_station_data.to_csv('simulation/sys_files/generated_file/raw_station_data.csv')
     raw_hex_data.to_csv('simulation/sys_files/generated_file/raw_hex_data.csv')
+    business_ref_table.to_csv('simulation/sys_files/generated_file/business_ref_table.csv')
 
 # Run simulation
 if rerun_simulation:
