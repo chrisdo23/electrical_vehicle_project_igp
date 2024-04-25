@@ -13,11 +13,10 @@ import asyncio
 
 refresh = False
 rerun_simulation = False
+multi_days_simulation = True
 
 simulation_level = 7
 env = simpy.Environment()
-now = datetime.combine(datetime.now().date() + timedelta(days=1), 
-                       datetime.min.time())
 
 # Analyse data
 if refresh:
@@ -36,6 +35,8 @@ if refresh:
 
 # Run simulation
 if rerun_simulation:
+    now = datetime.combine(datetime.now().date() + timedelta(days=1), 
+                       datetime.min.time())
     # Generate Simulation data
     sim_car_list = sim.generate_car_list()
     sim_station_list = sim.generate_staion(env)
@@ -48,12 +49,35 @@ if rerun_simulation:
         station_info = dict(sim_station_list[sim_station_list['ChargeDeviceId'] == chosen_station].head(1))
         # station_name = station_info['ChargeDeviceName'].values[0]
         charge_time = ev['ChargeTime']
+        car_id = ev['CarId']
         resource = station_info['Station'].values[0]
-        env.process(sim.car(env,id,chosen_station,resource,charge_time,now,log_df))
+        env.process(sim.car(env,car_id,chosen_station,resource,charge_time,now,log_df))
     env.run()
     log_df.to_csv('simulation/output/log/'+datetime.now().strftime("%Y%m%d%H%M")+'_sim_result.log')
     log_df.to_csv('simulation/sys_files/latest_sim_result.csv')
 
+# Run simulation for a continuous x days:
+if multi_days_simulation:
+    for i in range(0,8):
+        now = datetime.combine(datetime.now().date() + timedelta(days=(1+i)), datetime.min.time())
+        # Generate Simulation data
+        sim_car_list = sim.generate_car_list()
+        sim_station_list = sim.generate_staion(env)
+        log_df = pd.DataFrame(columns=['timestamp', 'car_id', 'station_id', 'event_name'])
+
+        for id, ev in sim_car_list.iterrows():
+            # chosen_station = dict(car_list[car_list['CarId'] == id].head(1))['ChargeDeviceId'].values[0]
+            chosen_station = ev['ChargeDeviceId']
+            # car_info = dict(car_list[car_list['CarId'] == id].head(1))
+            station_info = dict(sim_station_list[sim_station_list['ChargeDeviceId'] == chosen_station].head(1))
+            # station_name = station_info['ChargeDeviceName'].values[0]
+            charge_time = ev['ChargeTime']
+            car_id = ev['CarId']
+            resource = station_info['Station'].values[0]
+            env.process(sim.car(env,car_id,chosen_station,resource,charge_time,now,log_df))
+        env.run()
+        log_df.to_csv('simulation/output/log/mult_'+datetime.now().strftime("%Y%m%d%H%M")+'_sim_result.log')
+        log_df.to_csv('simulation/sys_files/latest_sim_result.csv')
 
 print(log_df)
 

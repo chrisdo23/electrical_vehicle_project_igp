@@ -6,3 +6,4 @@ simulation/output/log
 
 # Ignore connection data (with secrets connections)
 simulation/library/mong_connection.py
+.Rproj.user

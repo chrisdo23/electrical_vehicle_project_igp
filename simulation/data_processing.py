@@ -121,7 +121,7 @@ raw_traffic_data = pd.read_csv(cwd+'/simulation/sys_files/bristol_traffic_densit
 
 # Process traffic data
 
-def process_traffic_data():
+def process_traffic_data(simulation_res = -1):
     groupped_traffic_data = raw_traffic_data.groupby(['Count_point_id',
                                               'Region_id',
                                               'Region_name',
@@ -152,6 +152,7 @@ def process_traffic_data():
     raw_station_data['_id'] = flatten_station_data['_id']
     raw_station_data['ChargeDeviceId'] = flatten_station_data['ChargeDeviceId']
     raw_station_data['ChargeDeviceName'] = flatten_station_data['ChargeDeviceName']
+    raw_station_data['DateCreated'] = flatten_station_data['DateCreated']
     raw_station_data['Longitude'] = flatten_station_data['ChargeDeviceLocation.Longitude']
     raw_station_data['Latitude'] = flatten_station_data['ChargeDeviceLocation.Latitude']
     raw_station_data['Connector'] = flatten_station_data['Connector']
@@ -160,7 +161,15 @@ def process_traffic_data():
     traffic_data = pd.DataFrame()
     station_data = pd.DataFrame()
     all_hex_bristol = pd.DataFrame()
-    for res in range(cfg.min_res,cfg.max_res+1):
+
+    if simulation_res < 0:
+        min_res = cfg.min_res   
+        max_res = cfg.max_res
+    else:
+        min_res = simulation_res  
+        max_res = simulation_res
+
+    for res in range(min_res,max_res+1):
         temp = groupped_traffic_data.copy()
         temp['HexLevel'] = res
         temp['HexId']= temp.apply(lambda x: h3.geo_to_h3(lat=float(x['Latitude']),                                    
@@ -313,6 +322,7 @@ async def server_update_business_db(business_ref_table):    # NEED TO RREPLACE N
     # Push to python_response_nearest_stations
     response_db.insert_many(data)
     # await asyncio.sleep(30)
+    # await asyncio.sleep(30)
     project_db.client.close()
 
 # Simulation Preparation
@@ -323,6 +333,36 @@ def extract_traffic_data(dfactor = 0.5):
     # group by hour, calculate mean, std of traffic
     traffic_by_hour = raw_traffic_data[raw_traffic_data['Year'] == 2022].groupby(['Year', 'hour'], as_index=False).agg(
         AverageTrafficCount = ('All_motor_vehicles', 'median')
+    )
+    traffic_by_hour
+    traffic_7am = traffic_by_hour[traffic_by_hour['hour'] == 7]['AverageTrafficCount'].values[0]
+    traffic_6pm = traffic_by_hour[traffic_by_hour['hour'] == 18]['AverageTrafficCount'].values[0]
+    missing_hour = pd.DataFrame({'Year': [2022,2022,2022,2022,2022,2022,2022,2022,2022,2022,2022,2022],
+                                'hour': [1,2,3,4,5,6,19,20,21,22,23,24],
+                                'AverageTrafficCount': [traffic_7am*dfactor**6, 
+                                                        traffic_7am*dfactor**5, 
+                                                        traffic_7am*dfactor**4, 
+                                                        traffic_7am*dfactor**3, 
+                                                        traffic_7am*dfactor**2, 
+                                                        traffic_7am*dfactor,
+                                                        traffic_6pm*dfactor**2,
+                                                        traffic_6pm*dfactor**3,
+                                                        traffic_6pm*dfactor**4,
+                                                        traffic_6pm*dfactor**5,
+                                                        traffic_6pm*dfactor**6,
+                                                        traffic_6pm*dfactor**7]})
+
+    combined_hour_data = pd.concat([traffic_by_hour, missing_hour])
+    combined_hour_data = combined_hour_data.sort_values(by=['hour'], ascending=[True])
+    return combined_hour_data
+
+# For individual dates
+def extract_traffic_data_by_date(date, dfactor = 0.5, traffic_count_data=raw_traffic_data):
+    # dfactor - Arbitrary factor for scaling down traffic after woking hours
+    # group by hour, calculate mean, std of traffic
+
+    traffic_by_hour = traffic_count_data.query('CountDate==@date').groupby(['Year','hour'], as_index=False).agg(
+        AverageTrafficCount = ('AllMotorVehicles', 'median')
     )
     traffic_by_hour
     traffic_7am = traffic_by_hour[traffic_by_hour['hour'] == 7]['AverageTrafficCount'].values[0]

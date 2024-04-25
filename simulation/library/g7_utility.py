@@ -1,3 +1,5 @@
+import numpy as np
+
 def camel_case_conversion(df):
    df.rename(columns=lambda x: x[0].lower() + x.strip().lower().replace('_', ' ').title().replace(' ', '')[1:], inplace=True)
    return df
@@ -15,3 +17,6 @@ def to_camel_case(df):
     df_camel_case = df.rename(columns=camel_case_mapping)
 
     return df_camel_case
+
+def sig(x):
+ return 1/(1 + np.exp(-x))
