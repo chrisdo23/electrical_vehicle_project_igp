@@ -36,7 +36,11 @@ pacman::p_load(pacman,
                ggplot2,
                scales,
                viridis,
-               ggpubr)
+               ggpubr,
+               patchwork,
+               ggrepel,
+               clipr,
+               pak)
 
 # IMPORT FUNCTIONS ============
 

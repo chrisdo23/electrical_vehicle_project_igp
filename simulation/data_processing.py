@@ -425,5 +425,3 @@ def charger_allocation(ref_station_data):
     station_id = random.choices(ref_station_data['ChargeDeviceId'], weights=ref_station_data['AverageMotorVehicles'], cum_weights=None, k=1)[0]
     return station_id
 
-## Generate simulation data
-
