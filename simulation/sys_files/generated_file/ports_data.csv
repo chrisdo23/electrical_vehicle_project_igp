@@ -1,0 +1,5 @@
+,ConnectorType,ConnectorId,RatedOutputkW,RatedOutputVoltage,RatedOutputCurrent,ChargeMethod,ChargeMode,ChargePointStatus,TetheredCable,Information,Validated,Status,LastUpdatedAt
+0,3-pin Type G (BS1363),40,40,40,40,40,40,40,40,10,40,40,0
+1,CCS Type 2 Combo (IEC62196),65,65,65,65,65,65,65,65,22,65,65,0
+2,JEVS G105 (CHAdeMO) DC,57,57,57,57,57,57,57,57,16,57,57,0
+3,Type 2 Mennekes (IEC62196),270,270,270,270,270,270,270,270,93,270,270,0

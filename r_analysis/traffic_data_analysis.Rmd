@@ -1,0 +1,225 @@
+---
+title: "Traffic Analysis"
+author: "Triet Do"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("ini.R")
+source("rdata_load.R")
+ChargingStation <- import('../simulation/sys_files/generated_file/raw_station_data.csv') 
+TrafficData <- import('../simulation/sys_files/bristol_traffic_density.csv') 
+```
+
+# 2022 traffic data analysis
+## Overview
+```{r}
+Data2022 <- import('../simulation/output/simulation_all_2022.csv')
+Station2022 <- import('../simulation/output/station_2022.csv')
+CountData <- Data2022 %>%
+  group_by(date) %>%
+  summarise(car_demand_count = n_distinct(car_id),
+            station_used_count = n_distinct(station_id),
+            mean_charging_time = median(elapsed_time[event_name == 'charge - finish'], na.rm=TRUE)/60/60,
+            mean_waiting_time_til_available = median(elapsed_time[event_name == 'queue - charge'], na.rm=TRUE)/60/60,
+            mean_waiting_time_til_give_up = median(elapsed_time[event_name == 'queue - give up'], na.rm=TRUE)/60/60,
+            queue_count = sum(event_name=='arrive - queue', na.rm=TRUE),
+            give_up_count = sum(event_name=='queue - give up', na.rm=TRUE),
+            percentage_queue = queue_count/car_demand_count,
+            percentage_give_up = give_up_count/car_demand_count) %>%
+  ungroup()
+
+Summarized2022Data <- CountData %>%
+  summarise(median_car_count = median(car_demand_count),
+            median_station_used = median(station_used_count),
+            mean_charging_time = mean(mean_charging_time),
+            mean_waiting_time_til_available = mean(mean_waiting_time_til_available),
+            mean_waiting_time_til_give_up = mean(mean_waiting_time_til_give_up),
+            median_queue_count = median(queue_count),
+            median_give_up_count = median(give_up_count),
+            median_percentage_queue = median(percentage_queue),
+            median_percentage_give_up = median(percentage_give_up))
+# write_clip(Summarized2022Data)
+
+fig1 <- CountData %>%
+  ggplot(aes(x=date)) +
+  geom_line(aes(y=car_demand_count, color = 'carcount'), size=1) +
+  geom_line(aes(y=station_used_count, color = 'stationused'), size=1) +
+  scale_color_manual(values = c(carcount = "#69b3a2", stationused = "orange"),
+                     labels = c(carcount = "Car Count", stationused = "Station Used"),
+                     limits = c("carcount", "stationused")) +
+  ylim(0,900)+
+  # geom_text(data = NoShopping %>% filter(count >= 400)) +
+  # geom_label(data = NoShopping %>% filter(count >= 400), 
+  #            fill = "white",
+  #            alpha = 0.5) +
+  # scale_fill_viridis(discrete=FALSE) +
+  labs(
+    title = "Car/Demand Count",
+    subtitle = "by 2022, Bristol, UK",
+    x = "Time",
+    y = "Count",
+    # caption = paste0("Source: Tiki internal survey, August 2022 \nn = ", format(sum(NoShopping$count, na.rm = T), big.mark=",", scientific=FALSE))
+  ) +
+  # theme(legend.position = "bottom") + 
+  theme_bw()
+
+
+fig1
+```
+## Charging Station View
+```{r}
+StationPerDay <- Station2022 %>%
+  group_by(Date) %>%
+  summarise(all_station_count = n_distinct(ChargeDeviceId)) %>%
+  ungroup()
+
+StationCount <- ChargingStation %>%
+  mutate(Date = date(DateCreated)) %>%
+  group_by(Date) %>%
+  summarise(all_station_count = n_distinct(ChargeDeviceId)) %>%
+  ungroup() %>%
+  arrange(Date) %>%
+  mutate(cummulative_count = cumsum(all_station_count))
+
+fig2 <- StationCount %>%
+  ggplot(aes(x=Date)) +
+  geom_line(aes(y=cummulative_count), color='orange', size=1) +
+  labs(
+    title = "Charging Station Count",
+    subtitle = "from 2022 to 2024, Bristol, UK",
+    x = "Established Time",
+    y = "Station Count",
+    caption = paste0("Department for Transportation, 2024")
+  ) +
+  scale_x_date(date_breaks = "12 months", date_labels = "%Y")+
+  theme_bw()
+
+fig2
+```
+
+
+# One-week traffic simulation and analysis
+
+```{r}
+SimulationData <- import('../simulation/output/log/mult_202404261442_sim_result.csv')
+CleanSimulationData <- SimulationData %>%
+  mutate(date = date(timestamp))
+SummarizedData <- CleanSimulationData %>%
+  group_by(date) %>%
+  summarise(car_demand_count = n_distinct(car_id),
+            station_used_count = n_distinct(station_id),
+            mean_charging_time = median(elapsed_time[event_name == 'charge - finish'], na.rm=TRUE)/60/60,
+            mean_waiting_time_til_available = median(elapsed_time[event_name == 'queue - charge'], na.rm=TRUE)/60/60,
+            mean_waiting_time_til_give_up = median(elapsed_time[event_name == 'queue - give up'], na.rm=TRUE)/60/60,
+            queue_count = sum(event_name=='arrive - queue', na.rm=TRUE),
+            give_up_count = sum(event_name=='queue - give up', na.rm=TRUE),
+            percentage_queue = queue_count/car_demand_count,
+            percentage_give_up = give_up_count/car_demand_count) %>%
+  ungroup() %>%
+  filter(car_demand_count > 100) %>%
+  summarise(median_car_count = median(car_demand_count),
+            median_station_used = median(station_used_count),
+            mean_charging_time = mean(mean_charging_time),
+            mean_waiting_time_til_available = mean(mean_waiting_time_til_available),
+            mean_waiting_time_til_give_up = mean(mean_waiting_time_til_give_up),
+            median_queue_count = median(queue_count),
+            median_give_up_count = median(give_up_count),
+            median_percentage_queue = median(percentage_queue),
+            median_percentage_give_up = median(percentage_give_up))
+# write_clip(SummarizedData)
+```
+
+## Charging Station View
+```{r}
+StationUsed <- CleanSimulationData %>%
+  filter(event_name == 'arrive - charge') %>%
+  group_by(date, station_id) %>%
+  summarise(usage_count = n()) %>%
+  ungroup() %>%
+  left_join(ChargingStation %>%
+  select(ChargeDeviceId, Latitude, Longitude) %>%
+  distinct(ChargeDeviceId, Latitude, Longitude), 
+  by=c("station_id" = "ChargeDeviceId"))
+
+```
+
+
+```{r}
+p_load(ggmap,
+       osmdata,
+       OpenStreetMap,
+       gifski)
+bound <- getbb("Bristol")
+xlatmin=bound[1,1]
+xlatmax=bound[1,2]
+ylonmin=bound[2,1]
+ylonmax=bound[2,2]
+traffic_data <- TrafficData %>%
+  filter(Count_date > '2022-01-01',
+         Longitude >= xlatmin,
+         Longitude <= xlatmax,
+         Latitude >= ylonmin,
+         Latitude <= ylonmax) %>%
+  group_by(Count_point_id, Latitude, Longitude) %>%
+  summarise(avg_traffic_count = mean(All_motor_vehicles)) %>%
+  ungroup()
+
+station_data <- StationUsed %>%
+  # filter(date == '2024-04-27') %>%
+  filter(Longitude >= xlatmin,
+         Longitude <= xlatmax,
+         Latitude >= ylonmin,
+         Latitude <= ylonmax) %>%
+  group_by(station_id, Latitude, Longitude) %>%
+  summarise(station_usage_level = sum(usage_count)) %>%
+  ungroup()
+
+all_station_data <- ChargingStation %>%
+    filter(Longitude >= xlatmin,
+         Longitude <= xlatmax,
+         Latitude >= ylonmin,
+         Latitude <= ylonmax) %>%
+  distinct(ChargeDeviceId, Latitude, Longitude) %>%
+  filter(!(ChargeDeviceId %in% station_data$station_id))
+  
+  
+  
+# bristol_map <- openmap(c(bound[2,2],bound[1,2]),c(bound[2,1],bound[1,1]),
+#                type = "esri-natgeo",
+#                zoom = 12,
+#                # minNumTiles=12,
+#                mergeTiles = TRUE)
+# save(bristol_map, file='DATA/bristol_map.Rdata')
+map.remapped <- openproj(bristol_map, projection = "+proj=longlat +ellps=WGS84 +datum=WGS84")
+
+autoplot(map.remapped) +
+  geom_density2d_filled(data=traffic_data, 
+                        aes(x=Longitude, y=Latitude, fill=after_stat(level)), 
+                        alpha = 0.5,
+                        bins = 5) +
+  geom_density2d(data=traffic_data, 
+                 aes(x=Longitude, y=Latitude), 
+                 alpha = 0.5,
+                 bins = 20,
+                 size = 0.25,
+                 color = 'white') +
+  ylim(bound[2,1], bound[2,2]) +
+  xlim(bound[1,1], bound[1,2]) +
+  geom_point(data=station_data, aes(x=Longitude, y=Latitude, alpha=station_usage_level), color='black', size=0.5) +
+  geom_point(data=all_station_data, aes(x=Longitude, y=Latitude, label='no usage'), color='red', size=0.3) +
+  labs(
+    title = "Charging Station Usage Distribution",
+    subtitle = "Bristol, UK",
+    x = "Longitude",
+    y = "Latitude",
+    caption = paste0("Simulated from 2024-04-27 to 2024-05-03")
+  )
+```
+
+
+
+
+
